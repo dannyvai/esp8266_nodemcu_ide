@@ -1,8 +1,13 @@
 import wx
+import serial
+import thread
+import time
 
 class MainWindow(wx.Frame):
     window_width = 640
     window_height = 480
+    
+    upload_queue = []    
     
     def __init__(self, parent, title):
         wx.Frame.__init__(self, parent, title=title, size=(self.window_width,self.window_height))
@@ -12,6 +17,10 @@ class MainWindow(wx.Frame):
         self.serial_output.SetBackgroundColour((0,0,0))
         self.serial_output.SetForegroundColour((255,255,255))
         self.serial_output.SetEditable(False)
+        
+        self.serial_com =  wx.TextCtrl(self, pos=(0, self.window_height-120),size=(50,30))
+        self.start_serial_com = wx.Button(self, label="connect", pos=(55, self.window_height-120),size=(50,30))        
+        self.Bind(wx.EVT_BUTTON,self.connectSerial,self.start_serial_com)
         
         self.upload =wx.Button(self, label="Upload", pos=(self.window_width-70, self.window_height-120),size=(50,30))        
         self.Bind(wx.EVT_BUTTON,self.uploadLuaCode,self.upload)
@@ -36,8 +45,32 @@ class MainWindow(wx.Frame):
         self.Close(True)
 
     def uploadLuaCode(self,event):
-        print self.lua_code.GetValue()
-        
-app = wx.App(False)
-frame = MainWindow(None, "Sample editor")
-app.MainLoop()
+        code =  self.lua_code.GetValue()
+        for line in code:
+            self.upload_queue.append(line)
+
+    def connectSerial(self,event):
+         thread.start_new_thread(self.handleSerialConn,(self.serial_com.GetValue(),))
+
+    def handleSerialConn(self,com):
+        ser = serial.Serial(com,baudrate=9600)
+        ser.timeout = 0.5
+        while True:
+            if len(self.upload_queue) > 0:
+                line = self.upload_queue[0]
+                ser.write(line)
+                self.upload_queue.remove(line)
+                res = ser.read(1024)
+                if res and len(res) > 0:
+                    self.serial_output.AppendText(res)
+                    
+            time.sleep(0.1)
+
+def main():
+    app = wx.App(False)
+    frame = MainWindow(None, "Sample editor")
+    app.MainLoop()
+
+if __name__ == "__main__":
+    main()
+
